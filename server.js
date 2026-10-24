@@ -8,7 +8,7 @@ const { renderVideo } = require("./render");
 
 const app = express();
 const PORT = Number(process.env.PORT || 3456);
-const DATA_DIR = path.join(__dirname, "data");
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "projects.json");
 const RENDERS_DIR = path.join(DATA_DIR, "renders");
 
@@ -65,11 +65,11 @@ async function generateWithGemini(input) {
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", temperature: 0.7 } })
+    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", temperature: 0.7 } }),\n    signal: AbortSignal.timeout(45000)
   });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload && payload.error ? payload.error.message : "Gemini request failed (" + response.status + ")");
-  const text = payload && payload.candidates && payload.candidates[0] && payload.candidates[0].content.parts.map(function (p) { return p.text || ""; }).join("");
+  const text = payload && payload.candidates && payload.candidates[0] && payload.candidates[0].content && Array.isArray(payload.candidates[0].content.parts) ? payload.candidates[0].content.parts.map(function (p) { return p.text || ""; }).join("") : "";
   if (!text) throw new Error("Gemini returned an empty response.");
   return Object.assign(JSON.parse(text), { generator: "gemini", note: "AI-generated first draft. Verify factual claims and sources before publishing." });
 }
@@ -148,10 +148,10 @@ app.put("/api/projects/:id", async function (req, res, next) {
 app.use(function (error, _req, res, _next) {
   console.error(error);
   if (res.headersSent) return;
-  res.status(error.status || 500).json({ error: error.status === 404 ? "Output file not found." : "An unexpected server error occurred." });
+  const status = error.type === "entity.parse.failed" ? 400 : (error.status || 500);\n  const message = error.type === "entity.parse.failed" ? "Request body must contain valid JSON." : (status === 404 ? "Output file not found." : "An unexpected server error occurred.");\n  res.status(status).json({ error: message });
 });
 
-app.listen(PORT, function () {
+app.listen(PORT, "127.0.0.1", function () {
   console.log("\nYouTube AI Automation Agent: http://localhost:" + PORT);
   console.log("AI mode: " + (process.env.GEMINI_API_KEY ? "Gemini API" : "local demo generator"));
   console.log("Video rendering: FFmpeg + Windows built-in narration");
