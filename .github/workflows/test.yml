@@ -16,5 +16,8 @@ jobs:
           node-version: 20
       - name: Install dependencies
         run: npm install
+      - name: Audit runtime dependencies
+        run: npm audit --omit=dev
+        continue-on-error: true
       - name: Run API and MP4 rendering tests
         run: npm test
