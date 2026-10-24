@@ -6,7 +6,7 @@ on:
 
 jobs:
   smoke-test:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -16,5 +16,5 @@ jobs:
           node-version: 20
       - name: Install dependencies
         run: npm install
-      - name: Run smoke tests
+      - name: Run API and MP4 rendering tests
         run: npm test
