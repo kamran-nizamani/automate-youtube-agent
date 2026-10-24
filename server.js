@@ -65,7 +65,8 @@ async function generateWithGemini(input) {
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", temperature: 0.7 } }),\n    signal: AbortSignal.timeout(45000)
+    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", temperature: 0.7 } }),
+    signal: AbortSignal.timeout(45000)
   });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload && payload.error ? payload.error.message : "Gemini request failed (" + response.status + ")");
@@ -148,7 +149,9 @@ app.put("/api/projects/:id", async function (req, res, next) {
 app.use(function (error, _req, res, _next) {
   console.error(error);
   if (res.headersSent) return;
-  const status = error.type === "entity.parse.failed" ? 400 : (error.status || 500);\n  const message = error.type === "entity.parse.failed" ? "Request body must contain valid JSON." : (status === 404 ? "Output file not found." : "An unexpected server error occurred.");\n  res.status(status).json({ error: message });
+  const status = error.type === "entity.parse.failed" ? 400 : (error.status || 500);
+  const message = error.type === "entity.parse.failed" ? "Request body must contain valid JSON." : (status === 404 ? "Output file not found." : "An unexpected server error occurred.");
+  res.status(status).json({ error: message });
 });
 
 app.listen(PORT, "127.0.0.1", function () {
