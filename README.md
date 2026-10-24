@@ -1,58 +1,73 @@
 # YouTube AI Automation Agent
 
-A local-first YouTube creator workflow built from scratch. Milestone 1 delivers a working dashboard, script-draft generator, and local project queue.
+A local-first YouTube creator workflow. The app can draft scripts, save projects locally, and render an actual MP4 with scene cards and offline Windows narration.
 
-## Features
+## Current working features
 
-- Generate a draft from topic, niche, target length, and narration style.
-- Built-in local demo generator works without an API key.
-- Optional Gemini API integration.
-- Save projects locally in data/projects.json.
-- Review and copy generated narration.
-- Publishing remains manual; no YouTube account access is used in this milestone.
+- Topic-to-script workflow with title, hook, narration, scene plan, description, and tags.
+- Optional Gemini API integration for AI-generated script drafts.
+- Built-in demo script generator when no API key is configured (not real AI research).
+- Local project persistence in `data/projects.json`.
+- **Render MP4** creates scene-card images, Windows text-to-speech narration, and a playable H.264/AAC MP4 using FFmpeg.
+- Preview the MP4 in the dashboard and download it to your computer.
+- Output files stay in the local `data/renders` folder; they are not committed to Git.
+- No YouTube publishing occurs automatically. Review the result before uploading.
 
 ## Requirements
 
-- Node.js 20 or newer
-- npm
+- Windows 10/11
+- Node.js 20 or newer and npm
+- Internet connection during initial `npm install` to download dependencies
+- Windows PowerShell and a Windows text-to-speech voice (built into supported Windows installations)
 
-## Run on Windows
+## Run on Windows CMD
 
-Open PowerShell in the project folder:
+Open Command Prompt in the repository folder:
 
     npm install
-    Copy-Item .env.example .env
+    copy .env.example .env
     npm start
 
-Open http://localhost:3456 in your browser.
+Open http://localhost:3456. Keep the terminal open while using the app.
 
-For automatic server restarts, run npm run dev.
+If the server is already running, press `Ctrl+C` and run `npm install` again after pulling the latest code, then restart with `npm start`.
 
-## Optional Gemini API
+## Enable real AI script generation (optional)
 
-1. Get an API key from Google AI Studio and check the current free-tier limits.
-2. Open .env and set GEMINI_API_KEY=your_key_here.
-3. Optionally set GEMINI_MODEL=gemini-2.5-flash.
-4. Restart the server.
+1. Create a Gemini API key in [Google AI Studio](https://aistudio.google.com/app/apikey).
+2. Open `.env` in Notepad and set `GEMINI_API_KEY=your_key_here`.
+3. Save the file and restart `npm start`.
 
-Never commit .env or expose your API key. AI output is a draft, not verified research. Fact-check claims and verify media rights before publishing.
+Check current model access and free-tier limits before use. Never share or commit the API key. Without the key, the script generator uses a clearly labeled local demo template.
+
+## Render an MP4
+
+1. Generate a script.
+2. Click **Render MP4** below the script.
+3. Wait while the app creates narration and the scene-card video.
+4. Preview it in the dashboard and click **Download MP4**.
+
+Rendering is local and uses Windows' built-in speech synthesizer. The current renderer creates a narrated slideshow from generated scene cards; it does not yet create photorealistic AI video, source-backed research, or animated stock footage. Check narration pronunciation, facts, media rights, and the final video before publishing.
 
 ## API
 
-- GET /api/health — health and AI configuration
-- GET /api/projects — list saved projects
-- POST /api/generate — generate a script draft
-- POST /api/projects — save a project
-- PUT /api/projects/:id — update title, status, or script
+- `GET /api/health` — server and configuration status
+- `GET /api/projects` — list saved projects
+- `POST /api/generate` — generate a script draft
+- `POST /api/render` — render a draft to MP4
+- `POST /api/projects` — save a project
+- `PUT /api/projects/:id` — update title, status, script, or video URL
+- `/outputs/:renderId/video.mp4` — locally rendered output
 
 ## Roadmap
 
-1. Draft studio (current): topic → script → save project.
-2. Research and source tracking, storyboard editor, SEO metadata.
-3. Voice generation, licensed/owned visuals, subtitles, FFmpeg MP4 rendering.
-4. YouTube OAuth, upload preview, explicit human approval, publishing.
-5. Analytics and feedback loop.
+1. Draft studio and local project queue.
+2. Real source-backed research, editable storyboard, and SEO checks.
+3. **First local MP4 rendering pipeline added:** offline narration + scene-card slideshow.
+4. Better visuals, captions, progress tracking, and export bundles.
+5. YouTube OAuth, private/unlisted upload, explicit human approval, and publishing.
+6. Analytics and feedback loop.
 
 ## Stack
 
-Node.js, Express, vanilla HTML/CSS/JavaScript, optional Gemini API, and local JSON persistence. JSON keeps milestone 1 dependency-light; we can move to SQLite as workflows expand.
+Node.js, Express, vanilla HTML/CSS/JavaScript, optional Gemini API, FFmpeg, Sharp, Windows System.Speech, and local JSON persistence. JSON is used to keep the prototype dependency-light; SQLite can be introduced as the workflow grows.
