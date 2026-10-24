@@ -28,9 +28,9 @@ Open Command Prompt in the repository folder:
     copy .env.example .env
     npm start
 
-Open http://localhost:3456. Keep the terminal open while using the app.
+Open http://localhost:3456. Keep the terminal open while using the app. The server binds to `127.0.0.1` so this local prototype is not exposed to other devices on your network by default.
 
-If the server is already running, press `Ctrl+C` and run `npm install` again after pulling the latest code, then restart with `npm start`.
+If the server is already running, press `Ctrl+C`, run `git pull`, then run `npm install` and `npm test` before restarting with `npm start`.
 
 ## Enable real AI script generation (optional)
 
