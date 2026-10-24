@@ -4,13 +4,16 @@ const express = require("express");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const { renderVideo } = require("./render");
 
 const app = express();
 const PORT = Number(process.env.PORT || 3456);
 const DATA_DIR = path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "projects.json");
+const RENDERS_DIR = path.join(DATA_DIR, "renders");
 
 app.use(express.json({ limit: "1mb" }));
+app.use("/outputs", express.static(RENDERS_DIR, { fallthrough: false, dotfiles: "deny", index: false }));
 app.use(express.static(path.join(__dirname, "public")));
 
 async function readProjects() {
@@ -72,7 +75,7 @@ async function generateWithGemini(input) {
 }
 
 app.get("/api/health", function (_req, res) {
-  res.json({ ok: true, app: "YouTube AI Automation Agent", milestone: 1, aiConfigured: Boolean(process.env.GEMINI_API_KEY) });
+  res.json({ ok: true, app: "YouTube AI Automation Agent", milestone: 2, aiConfigured: Boolean(process.env.GEMINI_API_KEY), videoRendering: true, platform: process.platform });
 });
 
 app.get("/api/projects", async function (_req, res, next) {
@@ -93,7 +96,24 @@ app.post("/api/generate", async function (req, res) {
     if (input.topic.length < 3) return res.status(400).json({ error: "Please enter a topic with at least 3 characters." });
     res.json(Object.assign(await generateWithGemini(input), { input: input }));
   } catch (error) {
+    console.error("Script generation failed:", error.message);
     res.status(502).json({ error: "Could not generate a script: " + error.message });
+  }
+});
+
+app.post("/api/render", async function (req, res) {
+  try {
+    const draft = req.body && req.body.draft;
+    if (!draft || typeof draft.narration !== "string") {
+      return res.status(400).json({ error: "Generate a script before rendering a video." });
+    }
+    const id = crypto.randomUUID();
+    const outputDir = path.join(RENDERS_DIR, id);
+    const result = await renderVideo(draft, outputDir);
+    res.status(201).json(Object.assign({ id: id, title: clean(draft.title, 180) || "Untitled video" }, result));
+  } catch (error) {
+    console.error("Video rendering failed:", error.message);
+    res.status(500).json({ error: "Video rendering failed: " + error.message });
   }
 });
 
@@ -103,7 +123,7 @@ app.post("/api/projects", async function (req, res, next) {
     const topic = clean(req.body.topic, 180);
     if (!title || !topic) return res.status(400).json({ error: "A title and topic are required." });
     const projects = await readProjects();
-    const project = { id: crypto.randomUUID(), title: title, topic: topic, status: "Draft", script: req.body.script || null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const project = { id: crypto.randomUUID(), title: title, topic: topic, status: "Draft", script: req.body.script || null, videoUrl: clean(req.body.videoUrl, 500) || null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     projects.push(project);
     await writeProjects(projects);
     res.status(201).json(project);
@@ -118,6 +138,7 @@ app.put("/api/projects/:id", async function (req, res, next) {
     if (req.body.title !== undefined) projects[index].title = clean(req.body.title, 180);
     if (req.body.status && ["Draft", "In review", "Approved"].includes(req.body.status)) projects[index].status = req.body.status;
     if (req.body.script !== undefined) projects[index].script = req.body.script;
+    if (req.body.videoUrl !== undefined) projects[index].videoUrl = clean(req.body.videoUrl, 500) || null;
     projects[index].updatedAt = new Date().toISOString();
     await writeProjects(projects);
     res.json(projects[index]);
@@ -126,10 +147,12 @@ app.put("/api/projects/:id", async function (req, res, next) {
 
 app.use(function (error, _req, res, _next) {
   console.error(error);
-  res.status(500).json({ error: "An unexpected server error occurred." });
+  if (res.headersSent) return;
+  res.status(error.status || 500).json({ error: error.status === 404 ? "Output file not found." : "An unexpected server error occurred." });
 });
 
 app.listen(PORT, function () {
   console.log("\nYouTube AI Automation Agent: http://localhost:" + PORT);
   console.log("AI mode: " + (process.env.GEMINI_API_KEY ? "Gemini API" : "local demo generator"));
+  console.log("Video rendering: FFmpeg + Windows built-in narration");
 });
