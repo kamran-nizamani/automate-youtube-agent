@@ -5,11 +5,13 @@ const net = require("node:net");
 const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
+const { detectNarrationEngine } = require("../render");
 
-test("Windows renderer produces a playable MP4 with audio", {
-  skip: process.platform !== "win32" ? "The offline narration renderer requires Windows" : false,
-  timeout: 240000
-}, async t => {
+test("renderer produces a playable MP4 with audio", { timeout: 240000 }, async t => {
+  if (!await detectNarrationEngine()) {
+    t.skip("No offline narration engine found (Windows speech, macOS say, or espeak-ng)");
+    return;
+  }
   const portServer = net.createServer();
   await new Promise((resolve, reject) => {
     portServer.once("error", reject);

@@ -78,6 +78,25 @@ test("local API smoke test: health, generation, projects, and validation", async
   const projects = await listResponse.json();
   assert.ok(projects.some(project => project.id === saved.id));
 
+  // Several saves at once must all be kept (no lost updates).
+  const burst = await Promise.all([1, 2, 3, 4, 5].map(n => fetch(baseUrl + "/api/projects", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ title: "Burst " + n, topic: "Concurrent save " + n })
+  })));
+  burst.forEach(response => assert.equal(response.status, 201));
+  const afterBurst = await (await fetch(baseUrl + "/api/projects")).json();
+  assert.equal(afterBurst.filter(project => project.topic.startsWith("Concurrent save")).length, 5);
+
+  const updateResponse = await fetch(baseUrl + "/api/projects/" + saved.id, {
+    method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ status: "In review" })
+  });
+  assert.equal(updateResponse.status, 200);
+  assert.equal((await updateResponse.json()).status, "In review");
+  const missingProject = await fetch(baseUrl + "/api/projects/does-not-exist", {
+    method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ status: "Approved" })
+  });
+  assert.equal(missingProject.status, 404);
+
   const invalidRender = await fetch(baseUrl + "/api/render", {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ draft: {} })
   });

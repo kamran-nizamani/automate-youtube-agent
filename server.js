@@ -1,10 +1,10 @@
-require("dotenv").config();
+require("dotenv").config({ quiet: true });
 
 const express = require("express");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { renderVideo } = require("./render");
+const { renderVideo, detectNarrationEngine } = require("./render");
 
 const app = express();
 const PORT = Number(process.env.PORT || 3456);
@@ -27,7 +27,23 @@ async function readProjects() {
 
 async function writeProjects(projects) {
   await fs.mkdir(DATA_DIR, { recursive: true });
-  await fs.writeFile(DATA_FILE, JSON.stringify(projects, null, 2) + "\n", "utf8");
+  // Write to a temp file first so a crash can never leave projects.json half-written.
+  const tempFile = DATA_FILE + "." + process.pid + ".tmp";
+  await fs.writeFile(tempFile, JSON.stringify(projects, null, 2) + "\n", "utf8");
+  await fs.rename(tempFile, DATA_FILE);
+}
+
+// Read-modify-write runs one at a time so two quick saves cannot overwrite each other.
+let projectsQueue = Promise.resolve();
+function updateProjects(change) {
+  const run = projectsQueue.then(async function () {
+    const projects = await readProjects();
+    const result = await change(projects);
+    if (result && result.save) await writeProjects(projects);
+    return result && result.value;
+  });
+  projectsQueue = run.catch(function () {});
+  return run;
 }
 
 function clean(value, maxLength) {
@@ -72,11 +88,64 @@ async function generateWithGemini(input) {
   if (!response.ok) throw new Error(payload && payload.error ? payload.error.message : "Gemini request failed (" + response.status + ")");
   const text = payload && payload.candidates && payload.candidates[0] && payload.candidates[0].content && Array.isArray(payload.candidates[0].content.parts) ? payload.candidates[0].content.parts.map(function (p) { return p.text || ""; }).join("") : "";
   if (!text) throw new Error("Gemini returned an empty response.");
-  return Object.assign(JSON.parse(text), { generator: "gemini", note: "AI-generated first draft. Verify factual claims and sources before publishing." });
+  return normalizeDraft(parseModelJson(text), input);
 }
 
+// Models sometimes wrap JSON in a markdown fence even when asked not to.
+function parseModelJson(text) {
+  const stripped = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  try {
+    return JSON.parse(stripped);
+  } catch (_) {
+    throw new Error("Gemini returned a script that was not valid JSON. Please try again.");
+  }
+}
+
+// Makes sure an AI draft always has the fields the dashboard and renderer rely on.
+function normalizeDraft(raw, input) {
+  const draft = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  const scenes = (Array.isArray(draft.scenes) ? draft.scenes : [])
+    .filter(function (scene) { return scene && typeof scene === "object"; })
+    .map(function (scene, i) {
+      return {
+        scene: i + 1,
+        heading: clean(scene.heading, 180) || "Scene " + (i + 1),
+        visual: clean(scene.visual, 400),
+        narration: clean(scene.narration, 4000)
+      };
+    });
+  let narration = typeof draft.narration === "string" ? draft.narration.trim() : "";
+  if (!narration && scenes.length) {
+    narration = [clean(draft.hook, 600)].concat(scenes.map(function (s) { return s.narration; })).filter(Boolean).join("\n\n");
+  }
+  if (!narration) throw new Error("Gemini did not return any narration. Please try again.");
+  return {
+    title: clean(draft.title, 180) || input.topic,
+    hook: clean(draft.hook, 600),
+    narration: narration,
+    scenes: scenes,
+    description: typeof draft.description === "string" ? draft.description : "",
+    tags: Array.isArray(draft.tags) ? draft.tags.map(function (tag) { return clean(tag, 60); }).filter(Boolean).slice(0, 30) : [],
+    estimatedWordCount: Number(draft.estimatedWordCount) || narration.split(/\s+/).filter(Boolean).length,
+    tone: input.tone,
+    durationMinutes: input.duration,
+    generator: "gemini",
+    note: "AI-generated first draft. Verify factual claims and sources before publishing."
+  };
+}
+
+let narrationEngine = null;
+
 app.get("/api/health", function (_req, res) {
-  res.json({ ok: true, app: "YouTube AI Automation Agent", milestone: 2, aiConfigured: Boolean(process.env.GEMINI_API_KEY), videoRendering: true, platform: process.platform });
+  res.json({
+    ok: true,
+    app: "YouTube AI Automation Agent",
+    milestone: 2,
+    aiConfigured: Boolean(process.env.GEMINI_API_KEY),
+    videoRendering: Boolean(narrationEngine),
+    narrationEngine: narrationEngine ? narrationEngine.label : null,
+    platform: process.platform
+  });
 });
 
 app.get("/api/projects", async function (_req, res, next) {
@@ -88,11 +157,12 @@ app.get("/api/projects", async function (_req, res, next) {
 
 app.post("/api/generate", async function (req, res) {
   try {
+    const body = req.body || {};
     const input = {
-      topic: clean(req.body.topic, 180),
-      niche: clean(req.body.niche, 80),
-      tone: clean(req.body.tone || "Clear and engaging", 80),
-      duration: Math.max(1, Math.min(20, Number(req.body.duration) || 3))
+      topic: clean(body.topic, 180),
+      niche: clean(body.niche, 80),
+      tone: clean(body.tone || "Clear and engaging", 80),
+      duration: Math.max(1, Math.min(20, Number(body.duration) || 3))
     };
     if (input.topic.length < 3) return res.status(400).json({ error: "Please enter a topic with at least 3 characters." });
     res.json(Object.assign(await generateWithGemini(input), { input: input }));
@@ -102,12 +172,19 @@ app.post("/api/generate", async function (req, res) {
   }
 });
 
+let renderInProgress = false;
+
 app.post("/api/render", async function (req, res) {
+  const draft = req.body && req.body.draft;
+  if (!draft || typeof draft.narration !== "string") {
+    return res.status(400).json({ error: "Generate a script before rendering a video." });
+  }
+  // Rendering is CPU-heavy, so only one video is built at a time.
+  if (renderInProgress) {
+    return res.status(409).json({ error: "Another video is still rendering. Please wait for it to finish." });
+  }
+  renderInProgress = true;
   try {
-    const draft = req.body && req.body.draft;
-    if (!draft || typeof draft.narration !== "string") {
-      return res.status(400).json({ error: "Generate a script before rendering a video." });
-    }
     const id = crypto.randomUUID();
     const outputDir = path.join(RENDERS_DIR, id);
     const result = await renderVideo(draft, outputDir);
@@ -115,34 +192,42 @@ app.post("/api/render", async function (req, res) {
   } catch (error) {
     console.error("Video rendering failed:", error.message);
     res.status(500).json({ error: "Video rendering failed: " + error.message });
+  } finally {
+    renderInProgress = false;
   }
 });
 
 app.post("/api/projects", async function (req, res, next) {
   try {
-    const title = clean(req.body.title, 180);
-    const topic = clean(req.body.topic, 180);
+    const body = req.body || {};
+    const title = clean(body.title, 180);
+    const topic = clean(body.topic, 180);
     if (!title || !topic) return res.status(400).json({ error: "A title and topic are required." });
-    const projects = await readProjects();
-    const project = { id: crypto.randomUUID(), title: title, topic: topic, status: "Draft", script: req.body.script || null, videoUrl: clean(req.body.videoUrl, 500) || null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-    projects.push(project);
-    await writeProjects(projects);
+    const now = new Date().toISOString();
+    const project = { id: crypto.randomUUID(), title: title, topic: topic, status: "Draft", script: body.script || null, videoUrl: clean(body.videoUrl, 500) || null, createdAt: now, updatedAt: now };
+    await updateProjects(function (projects) {
+      projects.push(project);
+      return { save: true };
+    });
     res.status(201).json(project);
   } catch (error) { next(error); }
 });
 
 app.put("/api/projects/:id", async function (req, res, next) {
   try {
-    const projects = await readProjects();
-    const index = projects.findIndex(function (item) { return item.id === req.params.id; });
-    if (index < 0) return res.status(404).json({ error: "Project not found." });
-    if (req.body.title !== undefined) projects[index].title = clean(req.body.title, 180);
-    if (req.body.status && ["Draft", "In review", "Approved"].includes(req.body.status)) projects[index].status = req.body.status;
-    if (req.body.script !== undefined) projects[index].script = req.body.script;
-    if (req.body.videoUrl !== undefined) projects[index].videoUrl = clean(req.body.videoUrl, 500) || null;
-    projects[index].updatedAt = new Date().toISOString();
-    await writeProjects(projects);
-    res.json(projects[index]);
+    const body = req.body || {};
+    const updated = await updateProjects(function (projects) {
+      const project = projects.find(function (item) { return item.id === req.params.id; });
+      if (!project) return { save: false, value: null };
+      if (body.title !== undefined) project.title = clean(body.title, 180) || project.title;
+      if (body.status && ["Draft", "In review", "Approved"].includes(body.status)) project.status = body.status;
+      if (body.script !== undefined) project.script = body.script;
+      if (body.videoUrl !== undefined) project.videoUrl = clean(body.videoUrl, 500) || null;
+      project.updatedAt = new Date().toISOString();
+      return { save: true, value: project };
+    });
+    if (!updated) return res.status(404).json({ error: "Project not found." });
+    res.json(updated);
   } catch (error) { next(error); }
 });
 
@@ -154,8 +239,21 @@ app.use(function (error, _req, res, _next) {
   res.status(status).json({ error: message });
 });
 
-app.listen(PORT, "127.0.0.1", function () {
-  console.log("\nYouTube AI Automation Agent: http://localhost:" + PORT);
-  console.log("AI mode: " + (process.env.GEMINI_API_KEY ? "Gemini API" : "local demo generator"));
-  console.log("Video rendering: FFmpeg + Windows built-in narration");
+detectNarrationEngine().catch(function () { return null; }).then(function (engine) {
+  narrationEngine = engine;
+  const server = app.listen(PORT, "127.0.0.1", function () {
+    console.log("\nYouTube AI Automation Agent: http://localhost:" + PORT);
+    console.log("AI mode: " + (process.env.GEMINI_API_KEY ? "Gemini API" : "local demo generator"));
+    console.log("Video rendering: " + (engine
+      ? "FFmpeg + " + engine.label
+      : "unavailable (no offline text-to-speech engine found; on Linux install espeak-ng)"));
+  });
+  server.on("error", function (error) {
+    if (error.code === "EADDRINUSE") {
+      console.error("Port " + PORT + " is already in use. Stop the other program or set a different PORT in .env.");
+    } else {
+      console.error("Could not start the server:", error.message);
+    }
+    process.exit(1);
+  });
 });
