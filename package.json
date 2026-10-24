@@ -1,8 +1,8 @@
 {
   "name": "automate-youtube-agent",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Local-first YouTube AI automation dashboard — milestone 1",
+  "description": "Local-first YouTube AI automation and video rendering workspace",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -13,6 +13,8 @@
   },
   "dependencies": {
     "dotenv": "^16.4.7",
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "ffmpeg-static": "^5.2.0",
+    "sharp": "^0.34.3"
   }
 }
