@@ -1409,6 +1409,14 @@ class YouTubeAutomationAgent {
 
     this.app.put('/api/settings', protect, async (req, res) => {
       const allowed = ['approval_required', 'notification_enabled', 'channel_timezone', 'max_daily_posts', 'content_buffer_days'];
+      const ranges = { max_daily_posts: [1, 10], content_buffer_days: [0, 30] };
+      for (const [key, [min, max]] of Object.entries(ranges)) {
+        if (req.body?.[key] === undefined) continue;
+        const value = Number(req.body[key]);
+        if (!Number.isInteger(value) || value < min || value > max) {
+          return res.status(400).json({ error: `${key === 'max_daily_posts' ? 'Max posts per day' : 'Content buffer days'} must be a whole number from ${min} to ${max}` });
+        }
+      }
       for (const key of allowed) {
         if (req.body?.[key] !== undefined) await this.db.setSetting(key, String(req.body[key]));
       }

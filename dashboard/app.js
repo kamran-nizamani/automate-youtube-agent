@@ -814,7 +814,9 @@ function populateSettings(profile = {}, settings = {}, providers = []) {
     videoProvider: settings.video_provider || 'slideshow',
     videoGenerationMode: settings.video_generation_mode || 'hybrid',
     videoClipDuration: settings.video_clip_duration || '8',
-    videoMaxGeneratedSeconds: settings.video_max_generated_seconds || '60'
+    videoMaxGeneratedSeconds: settings.video_max_generated_seconds || '60',
+    maxDailyPosts: settings.max_daily_posts || '1',
+    contentBufferDays: settings.content_buffer_days || '3'
   };
   for (const [name, value] of Object.entries(videoMapping)) {
     if (form.elements[name] && document.activeElement !== form.elements[name]) form.elements[name].value = value;
@@ -1784,6 +1786,8 @@ $('#profile-form').addEventListener('submit', async event => {
       approval_required: $('#approval-required').checked,
       notification_enabled: $('#notifications-enabled').checked,
       channel_timezone: values.timezone,
+      max_daily_posts: values.maxDailyPosts,
+      content_buffer_days: values.contentBufferDays,
       video_provider: values.videoProvider,
       video_generation_mode: values.videoGenerationMode,
       video_clip_duration: Number(values.videoClipDuration),
@@ -1796,7 +1800,12 @@ $('#api-key-button').addEventListener('click', () => {
   if (requestApiKey() !== null) showToast('Dashboard API key saved in this browser.');
 });
 
+const VIEW_IDS = ['overview', 'operator', 'pipeline', 'calendar', 'analytics', 'engagement', 'connections', 'readiness', 'settings'];
 const initialView = location.hash.slice(1);
-if (['overview', 'operator', 'pipeline', 'calendar', 'analytics', 'engagement', 'connections', 'readiness', 'settings'].includes(initialView)) switchView(initialView);
+if (VIEW_IDS.includes(initialView)) switchView(initialView);
+window.addEventListener('hashchange', () => {
+  const view = location.hash.slice(1);
+  if (VIEW_IDS.includes(view)) switchView(view);
+});
 refreshDashboard();
 setInterval(() => refreshDashboard(true), 8000);
