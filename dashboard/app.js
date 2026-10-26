@@ -122,7 +122,7 @@ function renderDashboard() {
   $('#system-dot').classList.toggle('online', state.system.initialized && !state.system.automationPaused && !state.system.setupRequired);
   $('#automation-toggle').textContent = state.system.automationPaused ? 'Resume automation' : 'Pause automation';
   $('#automation-toggle').disabled = state.system.setupRequired;
-  $('#generate-button').disabled = state.system.setupRequired;
+  $('#generate-button').title = state.system.setupRequired ? 'Finish setup in Connections first' : '';
   $('#review-badge').textContent = reviews.length;
   $('#review-badge').classList.toggle('hidden', reviews.length === 0);
 
@@ -1673,7 +1673,16 @@ document.addEventListener('change', event => {
   }
 });
 
-$('#generate-button').addEventListener('click', () => $('#generate-dialog').showModal());
+function openGenerateDialog() {
+  if (ui.state?.system?.setupRequired) {
+    showToast('Add your AI key and sign in to YouTube first. Opening Connections.', 'error');
+    switchView('connections');
+    return;
+  }
+  $('#generate-dialog').showModal();
+}
+window.openGenerateDialog = openGenerateDialog;
+$('#generate-button').addEventListener('click', openGenerateDialog);
 $('#add-idea-button').addEventListener('click', () => $('#idea-dialog').showModal());
 $('#refresh-button').addEventListener('click', () => refreshDashboard());
 $('#channel-snapshot-refresh').addEventListener('click', () => loadChannelSnapshot(true));
