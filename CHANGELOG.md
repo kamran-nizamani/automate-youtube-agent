@@ -8,6 +8,8 @@
 - A key saved by the old command-line setup is adopted by the dashboard instead of being overwritten when another provider is chosen; Gemini can now be selected explicitly even when other providers' keys are set in `.env`.
 - Upgraded `sqlite3` to 6 and `sharp` to 0.35.5 and applied lockfile security fixes (30 audit findings down to 3 moderate `uuid` notices that do not apply to how it is used). Node.js 20.17 or newer is now required.
 - CI runs on `main`, Node 22.
+- Channel setup now edits **Max posts per day** and **Content buffer (days)**, validated on the server; changing the URL hash switches dashboard views.
+- README documents where the agent can run (not on serverless hosts such as Vercel) and how to recover from an out-of-date copy.
 
 - Refreshed provider defaults and selectors: OpenAI GPT-6.1 Sol (with GPT-6 Astra and Luna), Gemini 3.8 Flash (with Gemini 4 Argon), MiMo V2.6, GLM-5.3 Flash, Claude Fable 5.1, and the current OpenRouter catalog
 - Added DeepSeek (`DEEPSEEK_API_KEY`) and MiniMax M3 text (`MINIMAX_TEXT_API_KEY`) as text providers; the existing `MINIMAX_API_KEY` still only enables MiniMax H3 video

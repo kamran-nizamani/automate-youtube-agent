@@ -43,7 +43,13 @@ Then open `http://localhost:3456`. Everything else happens in the dashboard, wit
 
 Prefer the terminal? `npm run walkthrough` (guided) and `npm run setup` still work and write the same files the dashboard uses. Every setting is documented in [`.env.example`](.env.example).
 
+The repository is private, so `git clone` asks you to sign in to GitHub (`gh auth login`, or a personal access token). To update later, run `git pull` and `npm install`, then restart.
+
 FFmpeg is installed with `npm install` through `ffmpeg-static`. The slideshow renderer uses a Chromium browser: the dashboard finds Chrome or Chromium on your computer, or installs one from **Connections → Slideshow renderer**. Python is only needed to test an external DarkzSEO checkout.
+
+### Where it runs
+
+The agent is a long-running Node.js server with a local SQLite database, a background scheduler, and a local video renderer. Run it on your own computer, a VPS, or a host that gives you a persistent disk and a process that stays up (for example Railway, Render, or Fly.io with a volume). It **cannot run on serverless platforms such as Vercel or Netlify Functions**: they have no persistent disk, no background jobs, and no Chromium, so every request fails with `FUNCTION_INVOCATION_FAILED`. If you expose it beyond your own machine, set `API_KEY` and `ALLOWED_HOSTS`.
 
 ## How it works
 
@@ -140,6 +146,23 @@ Long videos use hybrid assembly: generated clips for the hook and key sections, 
 
 ## Configuration
 
+### Channel setup (in the dashboard)
+
+Open **Channel setup** to change these without editing any file:
+
+| Setting | What it does |
+| --- | --- |
+| Goal, audience, brand voice, default style, call to action, visual direction | Shape every script and thumbnail |
+| Blocked topics or terms | Quality review blocks content containing them |
+| Time zone | Used for schedules |
+| Max posts per day (1-10) | Upper limit on videos published in one day |
+| Content buffer (0-30 days) | How many days of ready content the operator keeps queued |
+| Require approval before scheduling | On by default |
+| Save operator notifications | Keeps operator events in the dashboard |
+| Video provider, generation mode, clip length, paid-seconds cap | Choose the slideshow or an AI video provider and cap spending |
+
+Keys and sign-in are under **Connections** instead. You can also open any page directly, for example `http://localhost:3456/#settings`.
+
 ### YouTube (required, free)
 
 1. Create a project in [Google Cloud Console](https://console.cloud.google.com/).
@@ -217,6 +240,8 @@ See the [API reference](docs/api.md) for every route.
 | The publishing queue runs but nothing publishes | Approved videos publish at their scheduled time (default: the next day at 2 PM). |
 | YouTube API quota exceeded | Check quotas in Google Cloud Console and reduce posting frequency. |
 | Content generation failed | Check your keys and credits, the job's error in the dashboard, and `logs/`. |
+| The dashboard shows "Creator workspace" or "Draft studio" | That is the old prototype page, so your copy or the running server is out of date. Run `git checkout main && git pull && npm install`, stop the old server, run `npm start`, and hard refresh the browser (`Ctrl+Shift+R`). |
+| `FUNCTION_INVOCATION_FAILED` on a Vercel link | The agent can't run on serverless hosting. See [Where it runs](#where-it-runs). |
 | Connections says "Open the dashboard at http://localhost…" | Credential changes are only accepted for requests addressed to this computer. Use `http://localhost:3456`, or add the address you use to `ALLOWED_HOSTS` in `.env`. |
 | The Google sign-in page says the redirect URI does not match | Use an OAuth client of type **Desktop app**. For a Web application client, add the redirect URI shown in **Connections → YouTube channel** to it. |
 | YouTube sign-in stopped working after about a week | While your Google app is in Testing mode, Google ends the sign-in after 7 days. Choose **Sign in again** in **Connections**. |
