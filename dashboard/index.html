@@ -285,6 +285,10 @@
             <label class="full-row"><span>Visual direction</span><input name="visualStyle"></label>
             <label class="full-row"><span>Blocked topics or terms</span><input name="bannedTopics" placeholder="term one, term two"><small>Quality review blocks content containing these terms.</small></label>
           </div>
+          <div class="form-grid">
+            <label><span>Max posts per day</span><input name="maxDailyPosts" type="number" min="1" max="10" step="1"><small>Upper limit for videos published in one day.</small></label>
+            <label><span>Content buffer (days)</span><input name="contentBufferDays" type="number" min="0" max="30" step="1"><small>How many days of ready content the operator keeps queued.</small></label>
+          </div>
           <div class="settings-row">
             <label class="toggle"><input id="approval-required" type="checkbox"><span></span> Require approval before scheduling</label>
             <label class="toggle"><input id="notifications-enabled" type="checkbox"><span></span> Save operator notifications</label>

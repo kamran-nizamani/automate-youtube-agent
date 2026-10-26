@@ -555,6 +555,11 @@ class SystemTest {
         if ((await call('/api/connections/text/unknown/test', { method: 'POST', body: {} })).status !== 404) throw new Error('Unknown provider should be a 404');
         if ((await call('/api/connections/services/unknown', { method: 'DELETE' })).status !== 404) throw new Error('Unknown service should be a 404');
 
+        for (const body of [{ max_daily_posts: 0 }, { max_daily_posts: 'many' }, { max_daily_posts: 99 }, { content_buffer_days: -1 }, { content_buffer_days: 2.5 }]) {
+          const rejected = await call('/api/settings', { method: 'PUT', body });
+          if (rejected.status !== 400 || !(await rejected.json()).error) throw new Error(`Out-of-range setting was accepted: ${JSON.stringify(body)}`);
+        }
+
         AITextService.forProvider = () => ({ generateText: async () => 'READY' });
         await call('/api/connections/text/deepseek', { method: 'PUT', body: { apiKey: 'sk-deep-0123456789' } });
         const tested = await (await call('/api/connections/text/deepseek/test', { method: 'POST', body: {} })).json();
